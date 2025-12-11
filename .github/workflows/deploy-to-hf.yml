@@ -22,9 +22,9 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           # 👇 REMPLACE PAR TON NOM D'UTILISATEUR HUGGING FACE
-          HF_USERNAME: "lucie159"
+          HF_USERNAME: "luciesp"
           # 👇 REMPLACE PAR LE NOM EXACT DE TON SPACE
-          HF_SPACE_NAME: "auravoice-api"
+          HF_SPACE_NAME: "auravoice"
         run: |
           echo "Début du déploiement vers Hugging Face..."
           
