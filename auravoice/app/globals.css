@@ -1,0 +1,175 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* New theme with cyan #00ffef and background #d8fff8 */
+:root {
+  --background: #d8fff8;
+  --foreground: #0a2f2a;
+  --card: #ffffff;
+  --card-foreground: #0a2f2a;
+  --popover: #ffffff;
+  --popover-foreground: #0a2f2a;
+  --primary: #00d4c8;
+  --primary-foreground: #ffffff;
+  --secondary: #e8fffe;
+  --secondary-foreground: #0a2f2a;
+  --muted: #f0fffe;
+  --muted-foreground: #4a6d68;
+  --accent: #00ffef;
+  --accent-foreground: #0a2f2a;
+  --destructive: #e74c3c;
+  --destructive-foreground: #ffffff;
+  --border: #b8e8e4;
+  --input: #b8e8e4;
+  --ring: #00d4c8;
+  --radius: 0.625rem;
+
+  /* Emotion Colors - Core Palette */
+  --emotion-joy: #2ecc71;
+  --emotion-calm: #3498db;
+  --emotion-surprise: #f1c40f;
+  --emotion-anxiety: #e67e22;
+  --emotion-anger: #e74c3c;
+  --emotion-sadness: #95a5a6;
+
+  /* Sidebar */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0a2f2a;
+  --sidebar-primary: #00d4c8;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e8fffe;
+  --sidebar-accent-foreground: #0a2f2a;
+  --sidebar-border: #b8e8e4;
+  --sidebar-ring: #00d4c8;
+
+  /* Chart colors using emotion palette */
+  --chart-1: var(--emotion-joy);
+  --chart-2: var(--emotion-calm);
+  --chart-3: var(--emotion-surprise);
+  --chart-4: var(--emotion-anxiety);
+  --chart-5: var(--emotion-anger);
+}
+
+@theme inline {
+  --font-sans: "Inter", "Inter Fallback", system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Geist Mono Fallback", monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Emotion color utilities */
+  --color-emotion-joy: var(--emotion-joy);
+  --color-emotion-calm: var(--emotion-calm);
+  --color-emotion-surprise: var(--emotion-surprise);
+  --color-emotion-anxiety: var(--emotion-anxiety);
+  --color-emotion-anger: var(--emotion-anger);
+  --color-emotion-sadness: var(--emotion-sadness);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Pulsing animation for emotion indicators */
+@keyframes pulse-emotion {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+.animate-pulse-emotion {
+  animation: pulse-emotion 2s ease-in-out infinite;
+}
+
+/* Alert blink animation */
+@keyframes alert-blink {
+  0%,
+  100% {
+    border-color: var(--emotion-anger);
+    box-shadow: 0 0 0 0 rgba(231, 76, 60, 0);
+  }
+  50% {
+    border-color: var(--emotion-anger);
+    box-shadow: 0 0 20px 4px rgba(231, 76, 60, 0.4);
+  }
+}
+
+.animate-alert-blink {
+  animation: alert-blink 1s ease-in-out infinite;
+}
+
+/* Recording pulse animation for microphone */
+@keyframes recording-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 212, 200, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(0, 212, 200, 0);
+  }
+}
+
+.animate-recording-pulse {
+  animation: recording-pulse 1.5s ease-in-out infinite;
+}
+
+/* Live indicator */
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-live-pulse {
+  animation: live-pulse 1s ease-in-out infinite;
+}

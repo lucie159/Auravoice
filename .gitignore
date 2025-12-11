@@ -1,0 +1,26 @@
+# --- Python ---
+venv/
+*/venv/
+__pycache__/
+*/__pycache__/
+*.pyc
+
+# --- Node ---
+node_modules/
+*/node_modules/
+.next/
+*/.next/
+
+# --- Env ---
+.env
+*.env
+
+
+# --- Système ---
+.DS_Store
+Thumbs.db
+
+temp_uploads/
+*/temp_uploads/
+*.mp3
+*.wav

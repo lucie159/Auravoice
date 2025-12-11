@@ -1,0 +1,57 @@
+services:
+  # ============================================
+  # BACKEND API
+  # ============================================
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_TYPE=${DATABASE_TYPE:-postgresql}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=auravoice
+      - POSTGRES_PASSWORD=auravoice_password
+      - POSTGRES_DB=auravoice
+      - MONGODB_URL=mongodb://mongodb:27017
+      - MONGODB_DB=auravoice
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-me-in-production}
+      - EMOTION_MODEL_TYPE=${EMOTION_MODEL_TYPE:-mock}
+      - EMOTION_MODEL_PATH=/app/models/emotion_model.onnx
+    volumes:
+      - ./uploads:/app/uploads
+      - ./models:/app/models
+    depends_on:
+      - postgres
+      - mongodb
+    restart: unless-stopped
+
+  # ============================================
+  # POSTGRESQL
+  # ============================================
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=auravoice
+      - POSTGRES_PASSWORD=auravoice_password
+      - POSTGRES_DB=auravoice
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  # ============================================
+  # MONGODB (Alternative)
+  # ============================================
+  mongodb:
+    image: mongo:7
+    volumes:
+      - mongodb_data:/data/db
+    ports:
+      - "27017:27017"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  mongodb_data:
