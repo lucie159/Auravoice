@@ -4,21 +4,48 @@ on:
   push:
     branches: [main]
     paths:
-      - "backend/**" # Ne se déclenche que si on touche au backend
+      - "backend/**" # Le workflow ne se lance que si on touche au dossier backend
 
 jobs:
-  sync-to-hub:
+  deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      # 1. Récupérer tout le code du dépôt
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           lfs: true
 
-      - name: Push to Hub
-        uses: nateraw/huggingface-sync-action@v1
-        with:
-          github_repo_dir: "backend" # On envoie uniquement ce dossier
-          huggingface_repo_id: "luciesp/auravoice"
-          huggingface_repo_type: "space"
-          hf_token: ${{ secrets.HF_TOKEN }}
+      # 2. Script manuel pour envoyer le dossier 'backend' vers la racine du Space
+      - name: Push to Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          # 👇 REMPLACE PAR TON NOM D'UTILISATEUR HUGGING FACE
+          HF_USERNAME: "lucie159"
+          # 👇 REMPLACE PAR LE NOM EXACT DE TON SPACE
+          HF_SPACE_NAME: "auravoice-api"
+        run: |
+          echo "Début du déploiement vers Hugging Face..."
+          
+          # Configuration de l'identité Git pour le robot
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
+          
+          # On entre dans le dossier backend
+          cd backend
+          
+          # On initialise un nouveau dépôt git temporaire ici
+          # Cela permet de dire : "Ce dossier est maintenant la racine du projet"
+          git init
+          git add .
+          git commit -m "Deploy from GitHub Actions"
+          
+          # On gère les gros fichiers (LFS) au cas où il y en aurait
+          git lfs install
+          
+          # On pousse vers Hugging Face en forçant la mise à jour
+          # La syntaxe est : https://USER:TOKEN@huggingface.co/spaces/USER/SPACE
+          git push --force https://$HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/$HF_USERNAME/$HF_SPACE_NAME main
+          
+          echo "Déploiement terminé avec succès !"
