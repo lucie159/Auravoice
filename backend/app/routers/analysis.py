@@ -5,7 +5,7 @@ from app.services.emotion_ai_service import emotion_service
 
 router = APIRouter()
 
-@router.post("api/analyze/upload")
+@router.post("/api/analyze/upload")
 async def analyze_audio_endpoint(file: UploadFile = File(...)):
     # 1. Dossier temporaire
     temp_dir = "temp_uploads"
