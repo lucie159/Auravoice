@@ -5,8 +5,6 @@ import librosa
 import soundfile as sf
 import noisereduce as nr
 import warnings
-import pickle
-import base64
 import tensorflow as tf
 
 # 1. LISTE DES ÉMOTIONS
@@ -25,28 +23,31 @@ APP_MAPPING = {
 
 CONFIDENCE_THRESHOLD = 40.0
 
-# 3. DONNÉES DU SCALER EN BASE64 (Pour éviter la corruption fichier)
-SCALER_DATA_B64 = "gASVrQEAAAAAAACMG3NrbGVhcm4ucHJlcHJvY2Vzc2luZy5fZGF0YZSMDlN0YW5kYXJkU2NhbGVylJOUKYGUfZQojAl3aXRoX21lYW6UiIwId2l0aF9zdGSUiIwEY29weZSIjA5uX2ZlYXR1cmVzX2luX5RLNowPbl9zYW1wbGVzX3NlZW5flIwWbnVtcHkuX2NvcmUubXVsdGlhcnJheZSMBnNjYWxhcpSTlIwFbnVtcHmUjAVkdHlwZZSTlIwCaTiUiYiHlFKUKEsDjAE8lE5OTkr/////Sv////9LAHSUYkMIeMM8AAAAAACUhpRSlIwFbWVhbl+UjBNqb2JsaWIubnVtcHlfcGlja2xllIwRTnVtcHlBcnJheVdyYXBwZXKUk5QpgZR9lCiMCHN1YmNsYXNzlGgNjAduZGFycmF5lJOUjAVzaGFwZZRLNoWUjAVvcmRlcpSMAUOUjAVkdHlwZZRoD4wCZjiUiYiHlFKUKEsDaBNOTk5K/////0r/////SwB0lGKMCmFsbG93X21tYXCUiIwbbnVtcHlfYXJyYXlfYWxpZ25tZW50X2J5dGVzlEsQdWIH/////////x/RL5GMrGPA6uVgCsmOQkDmV3WZqz0AQIsXXwB1NyhAd/vktfXxBMBAnOptTLEOQD7uDyck2xHA6q7X759d2T+zifNZdLgOwDTvOw5vDcQ/s3nHDApE+b+sjP2R05bxv84z5xfZq8I/8+wXhBH2+781euQMyNjkPwm9C2VW1QHAb8rAj/ZUwD+Dvthl2Y32v6tol8Hwx86/1/j9pK2M67//k6PU9BPqvzrzU8Cp/qQ/MMcpZuFt8L+cHKwhzPjqP2nU72Jdjui/q9rr7MWf9D+dfPqvnd7jvz23gGGrtPE/RhyjO/Ed0L8TfbtO4o/mP0FbvRsie9g/LTbzW3gB4j/d3DDJbunsP1zbXuTs79g/NIgmauDT8T90gq4I3LLhPxigdqfKlPQ/s4FKDNW+4D/xaDiYHuHnPxzRuntv5d0/DbUgDpeMwT9BuYwNJxXCP7VG/U5HCcE/TfOn0L2PwD9z8MP+PVvBP9ZKhiMJ5ME/ICwORa4Vwz+M7MvTxHjDP7CeBie4f8Q/GowbF3rtxj8Ya+a5VqzGP4SOAgtet8I/+IMNKLiwpT+yRw7AHC+GP5UqAAAAAAAAAIwEdmFyX5RoGymBlH2UKGgeaCBoIUs2hZRoI2gkaCVoKGgqiGgrSxB1Ygz////////////////wtB2qWzLoQACYaYSxQK1A/jBs7tb3fUBNp1jiGcyEQAcjeiIjBm5Ae3iz7BNhbUAr34Qr99tiQPE1SwiYnVxAl1YgW/TUWEC+kpw5Mu9IQDq2OrDbP0tAvbvEgiUuRkALLvwCzcpDQClKWiPKEkhAdu9ZkP63QUCTSNJgpdxHQAj0+DCmfj9AGahi6sgTRUBX3QKzIYA9QAK8/QFpBUBAD6omW2O3PUBdC/CFatQ7QHhD137d9T9A1ss8fsdVQUDyh9VEs/hBQK/zebaOEEJAn2kwpvBNQUD0ZOwbG2JAQDpEfC4ymz5A1do6ay+5P0BYQc2n0bc+QG+MAdmItkBANw6raNYQP0BBYFv38UdAQKXmopnLEEBArVHdvjRFQUCifPkk7IRBQCnC1KY1+kBAC+vMzDhWPEB+pxjXRSE5QET5fVTtWrE/tKirQW1Zsj9kPX1tQe2wP2jAMtKdVrA/i76vsEyDsT9RSmaJNB2yPyWieqgjt7M/i2l7KN7ssz/83VpSWUW1P03I1BZGqbk/PDpqdpKBuT8VcVriAKCyPyWl6QVutYg/fDiOxKoKVT+VLAAAAAAAAACMBnNjYWxlX5RoGymBlH2UKGgeaCBoIUs2hZRoI2gkaCVoKGgqiGgrSxB1Ygr/////////////ELV3uX7Ta0AT6WjkdJhOQEHjYsyy5TVAU02aCCvMOUD03m3cCf8uQHGil7NfqS5AiNIVKO+QKEBZH8JevWUlQMq9qLTA7iNAp0cd80I/HEBq96A2g4cdQC6VMtw3pBpANROFVZwqGUCq4Q7sUcEbQOftA6jOzxdAZr9t/QmiG0DRxEZRtHIWQADJbo16+BlA8DUIxsq5FUB5l/NscaQWQKnzjhYazhVAqMKDGgAaFUDwNxTSCJ0WQJeKfKJzjRdA2kV7ryH7F0Dk+E9GBwsYQIuA+LcfiBdAq5chYZTlFkDdyjusECEWQC7yRhGHhxZAegHrPWcrFkAiSKGKSCAXQJr5mItvSxZASz1zLUXTFkC5lgqRe6wWQH0lQ7QughdAWH4PmWStF0B3cx7V604XQPSjkXX9ShVAsDQguEoNFEDnfyIy8KnQPw75Ye1qItE/9ulpPfV00D/Z7NnoFCvQPxTJd8tGvdA/b7/mtDUG0T+8uy0jxMLRP+3sHi3n2tE/ZgSPFLpy0j/QYiiDREPUPzg3W7ORM9Q/FulNLT9D0T9j6yBwdx68P3mg6O81WaI/lR4AAAAAAAAAjBBfc2tsZWFybl92ZXJzaW9ulIwFMS42LjGUdWIu"
+# ==============================================================================
+# 👇 COLLE LES LISTES DE KAGGLE ICI (A LA PLACE DES CROCHETS VIDES) 👇
+# ==============================================================================
+
+MEAN_VALUES = [-157.5376399920511, 37.104176491834, 2.0337274901687827, 12.096118323251734, -2.6183034613828085, 3.8309959257822093, -4.464458941893074, 0.3853365876428498, -3.836964942744795, 0.15526941160967642, -1.5735285955856781, -1.106138165365508, 0.1502976427590345, -1.754574038217257, 0.6562882481533799, -2.236795964560841, 0.1306130645389689, -1.4041705146971206, -0.23838966643544662, -0.8626021427811784, -0.8048591070921447, 0.04108076941695366, -1.0266471079234103, 0.8428409960241059, -0.7696151057547994, 1.2882513892724914, -0.6222886801577415, 1.1123151323514966, -0.25761544061212827, 0.7041739319453465, 0.3777561819327231, 0.5657496054651174, 0.9088223554975404, 0.3969925617587496, 1.1152420207611935, 0.5580622977776358, 1.2853996500773537, 0.5281862199831295, 0.7436884988057614, 0.4702020240977001, 0.13692784095083424, 0.14103712986063205, 0.13288571534211824, 0.1292212725107591, 0.1354360190566245, 0.13964814112214252, 0.14899128134526263, 0.1521282361035045, 0.16017507463942432, 0.17898225791832817, 0.17688434588986468, 0.14599475255180538, 0.04229088609350673, 0.010822040675040995]  # <--- Colle la liste MEAN_VALUES ici (entre les crochets si besoin, ou remplace la ligne)
+SCALE_VALUES = [222.85612115107307, 61.17949308927245, 21.89513825086182, 25.796334756328317, 15.50026951717583, 15.328412103762092, 12.281292652708489, 10.705496209284089, 9.954390821480084, 7.055192168875377, 7.373486647650547, 6.660602896049189, 6.27800719639942, 6.93325273296583, 5.94919429407967, 6.9122046443525464, 5.600844702658633, 6.501945223053441, 5.431095086439593, 5.672665985806625, 5.460056398519643, 5.278044131359135, 5.65161557363057, 5.882537844587294, 5.988897013508849, 6.008446033772659, 5.88663390316108, 5.723679148683852, 5.517436769793056, 5.623403380673723, 5.539112067091, 5.78399099077947, 5.586391695835036, 5.718617761890974, 5.679342388751273, 5.88214423455808, 5.922523864119022, 5.826724386432337, 5.320898483216886, 5.016582068449478, 0.2601547346398352, 0.267408195329046, 0.2568373997265808, 0.2523953162556582, 0.2613357880283109, 0.2658489998963256, 0.2774050826090312, 0.2790472496403702, 0.2883048093015046, 0.316478012244662, 0.31541873973271006, 0.26945816151644725, 0.10968277300307572, 0.03579500089220182] # <--- Colle la liste SCALE_VALUES ici
+
+# Exemple à quoi ça doit ressembler une fois collé :
+# MEAN_VALUES = [0.1234, -5.6789, 42.0, ...]
+# SCALE_VALUES = [1.0, 0.5, 2.3, ...]
+# ==============================================================================
+
+
 class EmotionAIService:
     def __init__(self):
         self.model = None
-        self.scaler = None
-        self.tf = None
         self.tf_available = False
         
         base_path = os.path.dirname(__file__)
         self.model_path = os.path.join(base_path, "../models/speech_emotion_model.keras")
 
     async def initialize(self):
-        """
-        Initialisation robuste : 
-        1. Charge TensorFlow/Keras
-        2. Charge le Scaler depuis le texte Base64 (Anti-Crash)
-        """
-        # 1. Chargement TensorFlow
+        """Initialise TensorFlow et le Modèle"""
         try:
             import tensorflow as tf
-            self.tf = tf
             self.tf_available = True
             print("✅ TensorFlow loaded")
             if os.path.exists(self.model_path):
@@ -57,20 +58,12 @@ class EmotionAIService:
         except Exception as e:
             print("⚠️ Erreur modèle/TF:", e)
             self.tf_available = False
-
-        # 2. Chargement Scaler (Mode "Blindé")
-        try:
-            print("[AI] Tentative de chargement du scaler...")
-            if 'SCALER_DATA_B64' in globals() and len(SCALER_DATA_B64) > 100:
-                binary_data = base64.b64decode(SCALER_DATA_B64)
-                self.scaler = pickle.loads(binary_data)
-                print("✅ Scaler chargé avec succès (via Base64)")
-            else:
-                print("⚠️ Pas de données Scaler valides.")
-                self.scaler = None
-        except Exception as e:
-            print(f"⚠️ ATTENTION : Le scaler est corrompu ({e}). Mode dégradé.")
-            self.scaler = None
+            
+        # Plus besoin de charger le scaler, on a les valeurs en dur !
+        if len(MEAN_VALUES) > 0:
+            print(f"✅ Scaler manuel configuré ({len(MEAN_VALUES)} features)")
+        else:
+            print("⚠️ ATTENTION : Les valeurs MEAN_VALUES sont vides !")
 
     def _clean_audio(self, file_path):
         """Nettoie le bruit de l'audio"""
@@ -85,7 +78,6 @@ class EmotionAIService:
             return file_path
 
     def extract_features(self, file_path, sr=22050, n_mfcc=40, max_len=300):
-        """Extrait les caractéristiques audio (MFCC, Chroma, etc.)"""
         try:
             y, _ = librosa.load(file_path, sr=sr)
             if y is None or len(y) < 2048:
@@ -109,33 +101,35 @@ class EmotionAIService:
             return np.zeros((max_len, 54))
 
     async def analyze_audio_file(self, file_path: str):
-        """Fonction principale d'analyse"""
-        
-        # Vérification de sécurité
-        if not self.model or not self.scaler:
-            print("⚠️ Analyse impossible : Modèle ou Scaler manquant.")
-            return self._get_error_result("IA non initialisée correctement")
+        if not self.tf_available or self.model is None:
+            return self._get_error_result("Modèle manquant")
 
         clean_file_path = None
         try:
             loop = asyncio.get_event_loop()
-            
-            # 1. Nettoyage
             clean_file_path = await loop.run_in_executor(None, self._clean_audio, file_path)
-            
-            # 2. Extraction
             features = await loop.run_in_executor(None, self.extract_features, clean_file_path)
 
-            # 3. Préparation & Scaling
             features_flat = features.reshape(-1, features.shape[-1])
-            features_scaled = self.scaler.transform(features_flat)
-            X = features_scaled.reshape(1, features.shape[0], features.shape[1])
+            
+            # --- SCALING MANUEL (INFAILLIBLE) ---
+            if len(MEAN_VALUES) > 0 and len(SCALE_VALUES) > 0:
+                # (X - Mean) / Scale
+                try:
+                    mean_vec = np.array(MEAN_VALUES)
+                    scale_vec = np.array(SCALE_VALUES)
+                    features_scaled = (features_flat - mean_vec) / scale_vec
+                except Exception as e:
+                     print(f"Erreur maths: {e}")
+                     features_scaled = features_flat
+            else:
+                features_scaled = features_flat
+            # ------------------------------------
 
-            # 4. Prédiction
+            X = features_scaled.reshape(1, features.shape[0], features.shape[1])
             predictions = await loop.run_in_executor(None, lambda: self.model.predict(X))
             probs = predictions[0]
 
-            # 5. Interprétation
             idx = np.argmax(probs)
             raw_emotion_label = EMOTION_LABELS[idx] if idx < len(EMOTION_LABELS) else "neutral"
             app_emotion = APP_MAPPING.get(raw_emotion_label, "calm")
@@ -162,7 +156,6 @@ class EmotionAIService:
             traceback.print_exc()
             return self._get_error_result(str(e))
         finally:
-            # Nettoyage fichier temporaire
             if clean_file_path and clean_file_path != file_path and os.path.exists(clean_file_path):
                 try: os.remove(clean_file_path)
                 except: pass
@@ -192,5 +185,4 @@ class EmotionAIService:
             "duration": 0
         }
 
-# Instance globale
 emotion_service = EmotionAIService()
