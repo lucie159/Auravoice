@@ -8,7 +8,10 @@ import soundfile as sf
 import noisereduce as nr
 import warnings
 
-# 1. LISTE DES ÉMOTIONS DU MODÈLE (Ordre de l'entraînement TensorFlow)
+# Pour éviter les warnings AVX2 qui polluent les logs
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+# 1. LISTE DES ÉMOTIONS DU MODÈLE
 EMOTION_LABELS = ["anger", "disgust", "fear", "happiness", "neutral", "sadness", "surprise"]
 
 # 2. MAPPING VERS TON APPLICATION
@@ -22,8 +25,7 @@ APP_MAPPING = {
     "surprise": "surprise"
 }
 
-# 3. SEUIL DE CONFIANCE (Lissage)
-# Si une émotion forte est détectée avec moins de 40% de certitude, on la ramène à "Calm"
+# 3. SEUIL DE CONFIANCE
 CONFIDENCE_THRESHOLD = 40.0 
 
 class EmotionAIService:
@@ -31,60 +33,59 @@ class EmotionAIService:
         self.model = None
         self.scaler = None
         
-        # Chemins absolus vers les fichiers modèles
+        # Chemins absolus
         base_path = os.path.dirname(__file__)
         self.model_path = os.path.join(base_path, "../models/speech_emotion_model.keras")
         self.scaler_path = os.path.join(base_path, "../models/scaler.pkl") 
 
     async def initialize(self):
-        """Charge le modèle Keras et le Scaler au démarrage"""
-        print("[AI] Initialisation des composants IA (TensorFlow)...")
-        try:
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, self._load_components)
-        except Exception as e:
-            print(f"[AI] ERREUR CRITIQUE lors du chargement : {e}")
+        """Charge le modèle Keras et le Scaler au démarrage (Version Stable Synchrone)"""
+        print("[AI] Démarrage de l'initialisation IA...")
+        
+        # On charge directement ici pour éviter l'erreur "Event loop is closed"
+        self._load_components()
+        
+        if self.model and self.scaler:
+            print("[AI] Système prêt.")
+        else:
+            print("[AI] ATTENTION : Le système a démarré sans modèle IA.")
 
     def _load_components(self):
-        # 1. Charger le modèle
-        if os.path.exists(self.model_path):
-            self.model = tf.keras.models.load_model(self.model_path)
-            print(f"[AI] Modèle chargé avec succès : {self.model_path}")
-        else:
-            print(f"[AI] ERREUR : Fichier modèle introuvable à {self.model_path}")
+        try:
+            # 1. Charger le modèle
+            if os.path.exists(self.model_path):
+                self.model = tf.keras.models.load_model(self.model_path)
+                print(f"[AI] Modèle chargé : {self.model_path}")
+            else:
+                print(f"[AI] ERREUR : Fichier modèle introuvable à {self.model_path}")
 
-        # 2. Charger le scaler
-        if os.path.exists(self.scaler_path):
-            self.scaler = joblib.load(self.scaler_path)
-            print(f"[AI] Scaler chargé avec succès : {self.scaler_path}")
-        else:
-            print(f"[AI] ERREUR : Fichier scaler introuvable à {self.scaler_path}")
+            # 2. Charger le scaler
+            if os.path.exists(self.scaler_path):
+                self.scaler = joblib.load(self.scaler_path)
+                print(f"[AI] Scaler chargé : {self.scaler_path}")
+            else:
+                print(f"[AI] ERREUR : Fichier scaler introuvable à {self.scaler_path}")
+        except Exception as e:
+            print(f"[AI] Erreur interne pendant le chargement : {e}")
 
     def _clean_audio(self, file_path):
         """Nettoie le bruit de fond du fichier audio"""
         try:
-            # print(f"[AI] Nettoyage audio en cours : {file_path}")
             # Charger l'audio
-            data, rate = librosa.load(file_path, sr=22050) # 22050 est standard pour librosa/ton modèle
-
+            data, rate = librosa.load(file_path, sr=22050) 
             # Réduire le bruit
-            # prop_decrease=0.8 signifie qu'on enlève 80% du bruit estimé (pour ne pas rendre la voix robotique)
             reduced_noise = nr.reduce_noise(y=data, sr=rate, prop_decrease=0.8)
-
-            # Sauvegarder le fichier nettoyé
+            # Sauvegarder
             clean_path = file_path.replace(".wav", "_clean.wav").replace(".mp3", "_clean.wav")
             sf.write(clean_path, reduced_noise, rate)
-            
             return clean_path
         except Exception as e:
-            print(f"[AI] Attention: Échec du nettoyage, utilisation de l'original. Erreur: {e}")
+            print(f"[AI] Warning nettoyage: {e}")
             return file_path
 
     def extract_features(self, file_path, sr=22050, n_mfcc=40, max_len=300):
-        """Extraction des features (MFCC, Chroma, etc.)"""
         try:
             y, _ = librosa.load(file_path, sr=sr)
-            
             if y is None or len(y) < 2048:
                 return np.zeros((max_len, 54))
 
@@ -107,24 +108,25 @@ class EmotionAIService:
             return combined
 
         except Exception as e:
-            print(f"[AI] Erreur extraction features : {e}")
+            print(f"[AI] Erreur extraction: {e}")
             return np.zeros((max_len, 54))
 
     async def analyze_audio_file(self, file_path: str):
+        # Lazy loading de secours
         if not self.model or not self.scaler:
-            await self.initialize()
+            self._load_components()
             if not self.model or not self.scaler:
-                return self._get_error_result("Modèle ou Scaler manquant sur le serveur")
+                return self._get_error_result("Modèle ou Scaler manquant")
 
         clean_file_path = None
         
         try:
             loop = asyncio.get_event_loop()
             
-            # 1. Nettoyage Audio (NOUVEAU)
+            # 1. Nettoyage
             clean_file_path = await loop.run_in_executor(None, self._clean_audio, file_path)
 
-            # 2. Extraction des features sur le fichier PROPRE
+            # 2. Extraction
             features = await loop.run_in_executor(None, self.extract_features, clean_file_path)
             
             # 3. Scaling & Reshape
@@ -139,23 +141,21 @@ class EmotionAIService:
             predictions = await loop.run_in_executor(None, lambda: self.model.predict(X))
             probs = predictions[0]
             
-            # 5. Logique de Lissage (NOUVEAU)
+            # 5. Résultat
             idx = np.argmax(probs)
-            raw_confidence = float(np.max(probs)) * 100
-            
             raw_emotion_label = EMOTION_LABELS[idx] if idx < len(EMOTION_LABELS) else "neutral"
             app_emotion = APP_MAPPING.get(raw_emotion_label, "calm")
+            
+            raw_confidence = float(np.max(probs)) * 100
 
-            # Appliquer le seuil : Si c'est une émotion forte mais peu sûre -> Calme
+            # Lissage
             if app_emotion in ["anger", "joy", "sadness", "anxiety"] and raw_confidence < CONFIDENCE_THRESHOLD:
-                # print(f"[AI] Lissage: {app_emotion} ({raw_confidence:.1f}%) -> Ignoré (Confiance trop basse)")
                 app_emotion = "calm"
-                # On ajuste la confiance pour refléter l'incertitude
                 confidence = 55.0 
             else:
                 confidence = raw_confidence
 
-            # 6. Stats et Durée
+            # Stats
             stats = self._calculate_stats(probs)
             duration = librosa.get_duration(filename=clean_file_path) * 1000
 
@@ -171,18 +171,13 @@ class EmotionAIService:
             }
 
         except Exception as e:
-            print(f"[AI] Erreur lors de l'analyse : {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"[AI] Erreur analyse : {e}")
             return self._get_error_result(str(e))
         
         finally:
-            # Nettoyage fichier temporaire
             if clean_file_path and clean_file_path != file_path and os.path.exists(clean_file_path):
-                try:
-                    os.remove(clean_file_path)
-                except:
-                    pass
+                try: os.remove(clean_file_path)
+                except: pass
 
     def _calculate_stats(self, probs):
         stats = {
