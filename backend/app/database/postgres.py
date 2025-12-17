@@ -6,7 +6,9 @@ engine = create_async_engine(
     settings.postgres_url,
     echo=settings.debug,
     pool_size=10,
-    max_overflow=20
+    max_overflow=20,
+    connect_args={"statement_cache_size": 0},  
+    pool_pre_ping=True,                        
 )
 
 AsyncSessionLocal = async_sessionmaker(
