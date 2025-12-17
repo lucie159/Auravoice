@@ -32,7 +32,7 @@ class AgentStatus(str, Enum):
 class EmotionData(BaseModel):
     emotion: EmotionType
     confidence: float  # 0-100
-    timestamp: float  # seconds from start
+    timestamp: float  
 
 class EmotionAnalysisResult(BaseModel):
     client_emotions: List[EmotionData]
