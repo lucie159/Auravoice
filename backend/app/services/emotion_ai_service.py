@@ -24,7 +24,7 @@ class EmotionAIService:
         self.tf = None  # TensorFlow variable
         base_path = os.path.dirname(__file__)
         self.model_path = os.path.join(base_path, "../models/speech_emotion_model.keras")
-        self.scaler_path = os.path.join(base_path, "../models/scaler.pkl")
+        self.scaler_path = os.path.join(base_path, "../models/scaler_v2.pkl")
         self.tf_available = False  # marqueur pour savoir si TF est dispo
 
     async def initialize(self):
