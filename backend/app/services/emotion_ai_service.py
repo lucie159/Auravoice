@@ -1,126 +1,193 @@
 import os
 import asyncio
-# On n'utilise plus tensorflow !
-# import tensorflow as tf 
-from transformers import pipeline
+import numpy as np
+import librosa
+import tensorflow as tf
+import joblib
+import warnings
 
-# 1. Configuration du Mapping
-LABEL_MAPPING = {
-    "neu": "calm",
-    "hap": "joy",
-    "ang": "anger",
-    "sad": "sadness"
+# 1. LISTE DES ÉMOTIONS DU MODÈLE (Ordre de l'entraînement)
+# IMPORTANT : Cet ordre doit correspondre à encoder.categories_[0] de ton notebook
+EMOTION_LABELS = ["anger", "disgust", "fear", "happiness", "neutral", "sadness", "surprise"]
+
+# 2. MAPPING VERS TON APPLICATION (Frontend)
+# Ton appli attend : joy, anger, sadness, anxiety, calm, surprise
+APP_MAPPING = {
+    "angry": "anger",
+    "disgust": "anger",     # On mappe dégoût sur colère
+    "fear": "anxiety",      # Peur sur anxiété
+    "happy": "joy",
+    "neutral": "calm",
+    "sad": "sadness",
+    "surprised": "surprise"
 }
 
 class EmotionAIService:
     def __init__(self):
-        self.classifier = None
-        self.model_name = "superb/wav2vec2-base-superb-er"
+        self.model = None
+        self.scaler = None
+        
+        # Chemins absolus vers tes fichiers
+        base_path = os.path.dirname(__file__)
+        self.model_path = os.path.join(base_path, "../models/speech_emotion_model.keras")
+        self.scaler_path = os.path.join(base_path, "../models/scaler.pkl") 
 
     async def initialize(self):
-        """Charge le modèle Hugging Face au démarrage de l'API"""
-        print(f"[AI] Chargement du modèle {self.model_name}...")
+        """Charge le modèle Keras et le Scaler au démarrage"""
+        print("[AI] Initialisation des composants IA (TensorFlow)...")
         try:
-            # Exécution dans un thread séparé pour ne pas bloquer le démarrage asynchrone
+            # On charge dans un thread séparé pour ne pas bloquer le serveur
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, self._load_model)
-            print("[AI] Modèle chargé avec succès !")
+            await loop.run_in_executor(None, self._load_components)
         except Exception as e:
-            print(f"[AI] ERREUR CRITIQUE: Impossible de charger le modèle : {e}")
+            print(f"[AI] ERREUR CRITIQUE lors du chargement : {e}")
 
-    def _load_model(self):
-        """Fonction synchrone pour charger le pipeline"""
-        self.classifier = pipeline("audio-classification", model=self.model_name)
+    def _load_components(self):
+        # 1. Charger le modèle
+        if os.path.exists(self.model_path):
+            self.model = tf.keras.models.load_model(self.model_path)
+            print(f"[AI] Modèle chargé avec succès : {self.model_path}")
+        else:
+            print(f"[AI] ERREUR : Fichier modèle introuvable à {self.model_path}")
 
-    def _map_emotion(self, label):
-        """Traduit 'neu' en 'calm', etc."""
-        return LABEL_MAPPING.get(label, "calm")
+        # 2. Charger le scaler (Indispensable pour que ça marche)
+        if os.path.exists(self.scaler_path):
+            self.scaler = joblib.load(self.scaler_path)
+            print(f"[AI] Scaler chargé avec succès : {self.scaler_path}")
+        else:
+            print(f"[AI] ERREUR : Fichier scaler introuvable à {self.scaler_path}")
+
+    def extract_features(self, file_path, sr=22050, n_mfcc=40, max_len=300):
+        """
+        Extrait les caractéristiques audio EXACTEMENT comme lors de l'entraînement.
+        MFCC + Chroma + ZCR + RMS -> Stack -> Pad/Truncate
+        """
+        try:
+            # Chargement audio
+            y, _ = librosa.load(file_path, sr=sr)
+            
+            # Vérification fichier vide/silence
+            if y is None or len(y) < 2048:
+                return np.zeros((max_len, 54)) # 54 features concaténées
+
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                # Extraction
+                mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc).T
+                chroma = librosa.feature.chroma_stft(y=y, sr=sr).T
+                zcr = librosa.feature.zero_crossing_rate(y).T
+                rms = librosa.feature.rms(y=y).T
+
+            # Synchronisation des longueurs
+            min_l = min(len(mfccs), len(chroma), len(zcr), len(rms))
+            # Concaténation (axis=1)
+            combined = np.hstack([mfccs[:min_l], chroma[:min_l], zcr[:min_l], rms[:min_l]])
+
+            # Padding ou Truncating pour avoir toujours 300 timesteps
+            if combined.shape[0] < max_len:
+                pad_width = max_len - combined.shape[0]
+                # Pad avec des zéros à la fin
+                combined = np.pad(combined, ((0, pad_width), (0, 0)), mode='constant')
+            else:
+                # Couper si trop long
+                combined = combined[:max_len]
+
+            return combined
+
+        except Exception as e:
+            print(f"[AI] Erreur extraction features : {e}")
+            return np.zeros((max_len, 54))
 
     async def analyze_audio_file(self, file_path: str):
-        """
-        Reçoit le chemin d'un fichier audio, l'analyse et retourne le JSON formaté.
-        """
-        if not self.classifier:
-            print("[AI] Le modèle n'était pas chargé, tentative de rechargement...")
+        """Fonction principale appelée par l'API"""
+        
+        # Lazy loading (chargement si pas encore fait)
+        if not self.model or not self.scaler:
             await self.initialize()
-            if not self.classifier:
-                return self._get_error_result("Modèle IA non disponible")
+            if not self.model or not self.scaler:
+                return self._get_error_result("Modèle ou Scaler manquant sur le serveur")
 
         try:
-            # Exécuter la prédiction (opération lourde) dans un thread séparé
             loop = asyncio.get_event_loop()
-            predictions = await loop.run_in_executor(None, lambda: self.classifier(file_path, top_k=None))
             
-            # 2. Trouver l'émotion dominante
-            sorted_preds = sorted(predictions, key=lambda x: x['score'], reverse=True)
-            top_prediction = sorted_preds[0]
+            # 1. Extraction des features (dans un thread)
+            features = await loop.run_in_executor(None, self.extract_features, file_path)
             
-            dominant_label_raw = top_prediction['label']
-            dominant_label = self._map_emotion(dominant_label_raw)
-            confidence = top_prediction['score'] * 100
+            # 2. Préparation des données (Scaling & Reshape)
+            # features shape: (300, 54)
+            if features.ndim == 2:
+                # Le scaler attend du 2D (samples, features). Ici samples=time_steps
+                features_flat = features.reshape(-1, features.shape[-1])
+                # Application de la normalisation
+                features_scaled = self.scaler.transform(features_flat)
+                # Reshape pour le modèle LSTM: (Batch, Time, Features) -> (1, 300, 54)
+                X = features_scaled.reshape(1, features.shape[0], features.shape[1])
+            else:
+                raise ValueError(f"Shape inattendue des features: {features.shape}")
 
-            # 3. Préparer les statistiques
-            stats = {
-                "average_confidence": confidence,
-                "anger_percentage": 0,
-                "joy_percentage": 0,
-                "calm_percentage": 0,
-                "sadness_percentage": 0,
-                "anxiety_percentage": 0,
-                "surprise_percentage": 0
-            }
+            # 3. Prédiction
+            predictions = await loop.run_in_executor(None, lambda: self.model.predict(X))
+            probs = predictions[0] # Le tableau des probabilités
             
-            for p in predictions:
-                label_mapped = self._map_emotion(p['label'])
-                score_pct = round(p['score'] * 100)
+            # 4. Interprétation du résultat
+            idx = np.argmax(probs)
+            raw_emotion = EMOTION_LABELS[idx] if idx < len(EMOTION_LABELS) else "neutral"
+            app_emotion = APP_MAPPING.get(raw_emotion, "calm")
+            confidence = float(np.max(probs)) * 100
 
-                if label_mapped == "anger": stats["anger_percentage"] = score_pct
-                elif label_mapped == "joy": stats["joy_percentage"] = score_pct
-                elif label_mapped == "calm": stats["calm_percentage"] = score_pct
-                elif label_mapped == "sadness": stats["sadness_percentage"] = score_pct
+            # 5. Calcul des stats pour le frontend
+            stats = self._calculate_stats(probs)
+            
+            # 6. Durée réelle
+            duration = librosa.get_duration(filename=file_path) * 1000
 
-            # 4. Construire la réponse
             return {
-                "dominant_emotion": dominant_label,
+                "dominant_emotion": app_emotion,
                 "client_emotions": [
-                    {"emotion": dominant_label, "confidence": confidence, "timestamp": 0},
-                    {"emotion": dominant_label, "confidence": confidence, "timestamp": 5000} 
+                    {"emotion": app_emotion, "confidence": confidence, "timestamp": 0},
+                    {"emotion": app_emotion, "confidence": confidence, "timestamp": duration} 
                 ],
                 "agent_emotions": [], 
                 "stats": stats,
-                "duration": 5000
+                "duration": duration
             }
 
         except Exception as e:
             print(f"[AI] Erreur lors de l'analyse : {e}")
+            import traceback
+            traceback.print_exc()
             return self._get_error_result(str(e))
+
+    def _calculate_stats(self, probs):
+        """Calcule les pourcentages pour chaque émotion"""
+        stats = {
+            "average_confidence": float(np.max(probs)) * 100,
+            "anger_percentage": 0, "joy_percentage": 0, "calm_percentage": 0,
+            "sadness_percentage": 0, "anxiety_percentage": 0, "surprise_percentage": 0
+        }
+        
+        for i, score in enumerate(probs):
+            if i < len(EMOTION_LABELS):
+                raw = EMOTION_LABELS[i]
+                target = APP_MAPPING.get(raw)
+                if target:
+                    # On additionne car plusieurs émotions brutes peuvent mapper vers la même (ex: disgust -> anger)
+                    key = f"{target}_percentage"
+                    if key in stats:
+                        stats[key] += round(float(score) * 100)
+        return stats
 
     def _get_error_result(self, error_msg):
         return {
             "dominant_emotion": "calm",
-            "client_emotions": [], 
-            "agent_emotions": [],
-            "stats": {
-                "average_confidence": 0,
-                "anger_percentage": 0,
-                "joy_percentage": 0,
-                "calm_percentage": 0,
-                "sadness_percentage": 0,
-                "anxiety_percentage": 0,
-                "surprise_percentage": 0
-            },
-            "error": error_msg
+            "client_emotions": [], "agent_emotions": [],
+            "stats": {"average_confidence": 0},
+            "error": error_msg, "duration": 0
         }
-
-    # Méthode placeholder pour le temps réel (à implémenter plus tard avec WebSocket)
+        
     async def analyze_realtime_chunk(self, audio_data):
-        # Pour l'instant, on renvoie une donnée factice pour ne pas bloquer
-        return type('obj', (object,), {
-            "emotion": "calm", 
-            "confidence": 0.0, 
-            "timestamp": 0.0,
-            "model_dump": lambda: {"emotion": "calm", "confidence": 0}
-        })
+        # Placeholder pour éviter les erreurs d'import si nécessaire
+        pass
 
-# Création de l'instance unique
+# Instance globale
 emotion_service = EmotionAIService()
