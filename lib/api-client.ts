@@ -1,9 +1,11 @@
 import type { Agent, ActiveCall, CallReport, EmotionType, User } from "./types"
 
-// On force l'URL de l'API (assure-toi que c'est la bonne)
+// 1. CONFIGURATION DE L'URL API
+// En local : utilise http://localhost:8000
+// En prod (Vercel) : utilisera la variable d'environnement (l'URL Render)
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
-// On garde le mock uniquement pour les parties ADMIN complexes (stats globales) si besoin
+// Import dynamique des mocks pour éviter de charger du code inutile
 async function getMockModule() {
   return import("./mock-data")
 }
@@ -16,6 +18,7 @@ function getAuthHeaders(isMultipart = false) {
     headers["Authorization"] = `Bearer ${token}`
   }
   
+  // Pour l'upload de fichiers (multipart), on laisse le navigateur gérer le Content-Type
   if (!isMultipart) {
     headers["Content-Type"] = "application/json"
   }
@@ -24,7 +27,7 @@ function getAuthHeaders(isMultipart = false) {
 
 export const apiClient = {
   // ----------------------------------------------------
-  // VRAIE AUTHENTIFICATION (Plus de mock ici)
+  // AUTHENTIFICATION
   // ----------------------------------------------------
   async login(email: string, password: string): Promise<User | null> {
     try {
@@ -52,7 +55,7 @@ export const apiClient = {
       const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, name, role }), // Pas de team_id
+        body: JSON.stringify({ email, password, name, role }),
       })
 
       const data = await res.json()
@@ -64,16 +67,19 @@ export const apiClient = {
   },
 
   // ----------------------------------------------------
-  // VRAIE ANALYSE AUDIO (Utilise ton modèle LSTM)
+  // ANALYSE AUDIO (Le cœur du sujet)
   // ----------------------------------------------------
- async analyzeAudio(file: File, agentId?: string): Promise<CallReport> {
+  async analyzeAudio(file: File, agentId?: string): Promise<CallReport> {
     const formData = new FormData()
-    formData.append("file", file) 
+    formData.append("file", file) // IMPORTANT : La clé doit être "file" pour FastAPI
     if (agentId) formData.append("agentId", agentId)
 
-    const res = await fetch(`${API_BASE_URL}/analyze/upload`, {
+    // Note : On utilise /api/analyze/upload pour être cohérent avec /api/auth
+    // Si tu as une erreur 404, vérifie si ton backend attend /analyze/upload sans /api
+    const res = await fetch(`${API_BASE_URL}/api/analyze/upload`, {
       method: "POST",
       body: formData,
+      // Pas de headers ici, fetch gère le multipart automatiquement
     })
 
     if (!res.ok) {
@@ -83,14 +89,12 @@ export const apiClient = {
 
     const data = await res.json()
     
-    // --- C'EST ICI QUE LA MAGIE OPÈRE ---
-    // On traduit manuellement les champs Python vers JavaScript
+    // --- TRADUCTION PYTHON -> JAVASCRIPT ---
     return {
         ...data,
-        // Traduction de l'émotion dominante
-        dominantEmotion: data.dominant_emotion, // snake_case -> camelCase
+        // Mapping snake_case (Python) -> camelCase (JS)
+        dominantEmotion: data.dominant_emotion,
         
-        // Traduction des statistiques
         stats: {
             angerPercentage: data.stats.anger_percentage,
             joyPercentage: data.stats.joy_percentage,
@@ -101,7 +105,7 @@ export const apiClient = {
             averageConfidence: data.stats.average_confidence
         },
         
-        // Correction des tableaux d'émotions
+        // Mapping des tableaux
         clientEmotions: data.client_emotions.map((e: any) => ({
             emotion: e.emotion,
             confidence: e.confidence,
@@ -109,23 +113,22 @@ export const apiClient = {
         })),
         agentEmotions: data.agent_emotions || [],
         
-        // Correction de la durée (Python envoie ms ? on veut des secondes ?)
-        // Si Python envoie 5000 (ms), on divise par 1000 pour avoir 5 secondes
+        // Correction durée (si Python renvoie des ms, on convertit en secondes)
         duration: data.duration > 1000 ? Math.round(data.duration / 1000) : data.duration
     }
   },
 
   async analyzeRecording(blob: Blob, agentId?: string): Promise<CallReport> {
-    const file = new File([blob], "recording.wav", { type: "file/wav" })
+    // On convertit le Blob du micro en File
+    const file = new File([blob], "recording.wav", { type: "audio/wav" })
     return this.analyzeAudio(file, agentId)
   },
 
   // ----------------------------------------------------
-  // PARTIE ADMIN / DASHBOARD (Peut rester hybride ou Mock pour l'instant)
+  // DASHBOARD & ADMIN (Mode Hybride : API si dispo, sinon Mock)
   // ----------------------------------------------------
   
   async getAgents(): Promise<Agent[]> {
-    // Si tu veux tester le dashboard Admin avec des vraies données :
     try {
       const res = await fetch(`${API_BASE_URL}/api/agents`, { headers: getAuthHeaders() })
       if (res.ok) {
@@ -134,7 +137,7 @@ export const apiClient = {
       }
     } catch(e) {}
     
-    // Fallback Mock si l'API n'est pas prête pour ça
+    // Fallback Mock
     const { api } = await getMockModule()
     return api.getAgents()
   },
@@ -153,14 +156,16 @@ export const apiClient = {
   },
 
   async getActiveCalls(): Promise<ActiveCall[]> {
-     // Pour l'instant on laisse le mock pour la démo dashboard
+     // Mock pour le temps réel pour l'instant
      const { api } = await getMockModule()
      return api.getActiveCalls()
   },
   
   async getReportById(id: string): Promise<CallReport | null> {
-      const res = await fetch(`${API_BASE_URL}/api/reports/${id}`, { headers: getAuthHeaders() })
-      if(res.ok) return (await res.json()).report
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/reports/${id}`, { headers: getAuthHeaders() })
+        if(res.ok) return (await res.json())
+      } catch(e) {}
       return null
   }
 }
