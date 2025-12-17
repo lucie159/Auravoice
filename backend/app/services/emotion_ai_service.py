@@ -49,14 +49,21 @@ class EmotionAIService:
 
         # 2. Chargement Scaler (Directement depuis la mémoire)
         try:
-            print("[AI] Chargement du scaler depuis la variable statique...")
-            binary_data = base64.b64decode(SCALER_DATA_B64)
-            self.scaler = pickle.loads(binary_data)
-            print("✅ Scaler chargé avec succès !")
+            print("[AI] Tentative de chargement du scaler...")
+            # On vérifie si la variable existe et n'est pas vide
+            if 'SCALER_DATA_B64' in globals() and len(SCALER_DATA_B64) > 100:
+                binary_data = base64.b64decode(SCALER_DATA_B64)
+                self.scaler = pickle.loads(binary_data)
+                print("✅ Scaler chargé avec succès !")
+            else:
+                print("⚠️ Pas de données Scaler trouvées, on continue sans.")
+                self.scaler = None
             
         except Exception as e:
-            print(f"❌ Erreur critique chargement scaler : {e}")
-            raise e
+            # ICI EST LA CLÉ : On affiche l'erreur mais ON NE PLANTE PAS (pas de raise)
+            print(f"⚠️ ATTENTION : Le scaler est corrompu ({e}).")
+            print("➡️ Le serveur démarre quand même en mode dégradé.")
+            self.scaler = None 
         
 
     async def analyze_audio_file(self, file_path: str):
