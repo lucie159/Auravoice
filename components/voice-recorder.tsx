@@ -19,6 +19,9 @@ export function VoiceRecorder({ onRecordingComplete, isProcessing }: VoiceRecord
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const timerRef = useRef<NodeJS.Timeout | null>(null)
+  
+  // Réf pour retenir le format audio supporté par le navigateur (webm, mp4, etc.)
+  const mimeTypeRef = useRef<string>("")
 
   useEffect(() => {
     return () => {
@@ -30,7 +33,26 @@ export function VoiceRecorder({ onRecordingComplete, isProcessing }: VoiceRecord
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const mediaRecorder = new MediaRecorder(stream)
+      
+      // --- DÉBUT CORRECTION ---
+      // Détection du type MIME supporté (Chrome/Firefox = webm, Safari = mp4)
+      let mimeType = ""
+      if (typeof MediaRecorder !== "undefined") {
+        const types = ["audio/webm", "audio/mp4", "audio/ogg", "audio/wav"]
+        for (const type of types) {
+          if (MediaRecorder.isTypeSupported(type)) {
+            mimeType = type
+            break
+          }
+        }
+      }
+      mimeTypeRef.current = mimeType
+      // --- FIN CORRECTION ---
+
+      // Initialisation avec le bon type mime (si détecté)
+      const options = mimeType ? { mimeType } : undefined
+      const mediaRecorder = new MediaRecorder(stream, options)
+      
       mediaRecorderRef.current = mediaRecorder
       chunksRef.current = []
 
@@ -41,9 +63,12 @@ export function VoiceRecorder({ onRecordingComplete, isProcessing }: VoiceRecord
       }
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/wav" })
+        // Création du Blob avec le type dynamique (évite le problème de silence)
+        const blob = new Blob(chunksRef.current, { type: mimeTypeRef.current || "audio/webm" })
         setAudioBlob(blob)
         setAudioUrl(URL.createObjectURL(blob))
+        
+        // Arrêter proprement les pistes audio (éteint le micro)
         stream.getTracks().forEach((track) => track.stop())
       }
 
@@ -55,7 +80,8 @@ export function VoiceRecorder({ onRecordingComplete, isProcessing }: VoiceRecord
         setRecordingTime((prev) => prev + 1)
       }, 1000)
     } catch (error) {
-      console.error("Microphone access denied")
+      console.error("Microphone access denied", error)
+      alert("Impossible d'accéder au microphone. Veuillez vérifier vos autorisations.")
     }
   }
 
@@ -95,10 +121,10 @@ export function VoiceRecorder({ onRecordingComplete, isProcessing }: VoiceRecord
     <Card className="border-0 shadow-lg">
       <CardContent className="p-6">
         <div className="flex flex-col items-center gap-6">
-          {/* Recording indicator */}
+          {/* Indicateur visuel d'enregistrement */}
           <div
             className={`flex h-24 w-24 items-center justify-center rounded-full transition-all ${
-              isRecording ? "bg-red-100 animate-recording-pulse" : audioBlob ? "bg-primary/10" : "bg-secondary"
+              isRecording ? "bg-red-100 animate-pulse" : audioBlob ? "bg-primary/10" : "bg-secondary"
             }`}
           >
             {isRecording ? (
@@ -120,17 +146,17 @@ export function VoiceRecorder({ onRecordingComplete, isProcessing }: VoiceRecord
             ) : audioBlob ? (
               <>
                 <p className="text-3xl font-mono font-bold text-foreground">{formatTime(recordingTime)}</p>
-                <p className="text-sm text-muted-foreground">Enregistrement termine</p>
+                <p className="text-sm text-muted-foreground">Enregistrement terminé</p>
               </>
             ) : (
               <p className="text-muted-foreground">Cliquez pour commencer l'enregistrement</p>
             )}
           </div>
 
-          {/* Audio Player */}
+          {/* Lecteur Audio */}
           {audioUrl && <audio controls src={audioUrl} className="w-full max-w-sm" />}
 
-          {/* Controls */}
+          {/* Contrôles */}
           <div className="flex gap-3">
             {!isRecording && !audioBlob && (
               <Button onClick={startRecording} className="gap-2" size="lg">
@@ -142,7 +168,7 @@ export function VoiceRecorder({ onRecordingComplete, isProcessing }: VoiceRecord
             {isRecording && (
               <Button onClick={stopRecording} variant="destructive" className="gap-2" size="lg">
                 <Square className="h-5 w-5" />
-                Arreter
+                Arrêter
               </Button>
             )}
 
