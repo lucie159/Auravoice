@@ -36,7 +36,7 @@ COPY --chown=user . .
 RUN mkdir -p uploads temp_uploads
 
 # 8. Exposition du port 7860 (Standard Hugging Face)
-EXPOSE 7860
+EXPOSE 10000
 
 # 9. Démarrage de l'application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7860"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "10000"]
