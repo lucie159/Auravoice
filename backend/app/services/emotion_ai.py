@@ -8,13 +8,13 @@ import soundfile as sf
 import noisereduce as nr
 import warnings
 
-# Pour éviter les warnings AVX2 qui polluent les logs
+# On réduit les logs TensorFlow
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
-# 1. LISTE DES ÉMOTIONS DU MODÈLE
+# 1. LISTE DES ÉMOTIONS
 EMOTION_LABELS = ["anger", "disgust", "fear", "happiness", "neutral", "sadness", "surprise"]
 
-# 2. MAPPING VERS TON APPLICATION
+# 2. MAPPING
 APP_MAPPING = {
     "anger": "anger",
     "disgust": "anger",
@@ -25,7 +25,7 @@ APP_MAPPING = {
     "surprise": "surprise"
 }
 
-# 3. SEUIL DE CONFIANCE
+# 3. SEUIL
 CONFIDENCE_THRESHOLD = 40.0 
 
 class EmotionAIService:
@@ -33,49 +33,40 @@ class EmotionAIService:
         self.model = None
         self.scaler = None
         
-        # Chemins absolus
         base_path = os.path.dirname(__file__)
         self.model_path = os.path.join(base_path, "../models/speech_emotion_model.keras")
         self.scaler_path = os.path.join(base_path, "../models/scaler.pkl") 
 
     async def initialize(self):
-        """Charge le modèle Keras et le Scaler au démarrage (Version Stable Synchrone)"""
-        print("[AI] Démarrage de l'initialisation IA...")
-        
-        # On charge directement ici pour éviter l'erreur "Event loop is closed"
-        self._load_components()
-        
-        if self.model and self.scaler:
-            print("[AI] Système prêt.")
-        else:
-            print("[AI] ATTENTION : Le système a démarré sans modèle IA.")
+        """
+        NE FAIT RIEN AU DÉMARRAGE pour ne pas faire planter Render.
+        Le modèle sera chargé à la première requête.
+        """
+        print("[AI] Démarrage rapide : Le modèle sera chargé à la première analyse.")
+        pass
 
     def _load_components(self):
+        """Charge le modèle de façon synchrone"""
+        print("[AI] Chargement des composants en mémoire maintenant...")
         try:
-            # 1. Charger le modèle
             if os.path.exists(self.model_path):
                 self.model = tf.keras.models.load_model(self.model_path)
-                print(f"[AI] Modèle chargé : {self.model_path}")
+                print(f"[AI] Modèle chargé.")
             else:
-                print(f"[AI] ERREUR : Fichier modèle introuvable à {self.model_path}")
+                print(f"[AI] ERREUR : Modèle introuvable : {self.model_path}")
 
-            # 2. Charger le scaler
             if os.path.exists(self.scaler_path):
                 self.scaler = joblib.load(self.scaler_path)
-                print(f"[AI] Scaler chargé : {self.scaler_path}")
+                print(f"[AI] Scaler chargé.")
             else:
-                print(f"[AI] ERREUR : Fichier scaler introuvable à {self.scaler_path}")
+                print(f"[AI] ERREUR : Scaler introuvable : {self.scaler_path}")
         except Exception as e:
-            print(f"[AI] Erreur interne pendant le chargement : {e}")
+            print(f"[AI] Erreur de chargement : {e}")
 
     def _clean_audio(self, file_path):
-        """Nettoie le bruit de fond du fichier audio"""
         try:
-            # Charger l'audio
             data, rate = librosa.load(file_path, sr=22050) 
-            # Réduire le bruit
             reduced_noise = nr.reduce_noise(y=data, sr=rate, prop_decrease=0.8)
-            # Sauvegarder
             clean_path = file_path.replace(".wav", "_clean.wav").replace(".mp3", "_clean.wav")
             sf.write(clean_path, reduced_noise, rate)
             return clean_path
@@ -112,11 +103,15 @@ class EmotionAIService:
             return np.zeros((max_len, 54))
 
     async def analyze_audio_file(self, file_path: str):
-        # Lazy loading de secours
+        # --- C'EST ICI QUE LE CHARGEMENT SE FAIT ---
+        # Si le modèle n'est pas là, on le charge maintenant
         if not self.model or not self.scaler:
-            self._load_components()
+            loop = asyncio.get_event_loop()
+            # On utilise run_in_executor pour ne pas bloquer si le chargement est lourd
+            await loop.run_in_executor(None, self._load_components)
+            
             if not self.model or not self.scaler:
-                return self._get_error_result("Modèle ou Scaler manquant")
+                return self._get_error_result("Échec du chargement du modèle")
 
         clean_file_path = None
         
@@ -172,6 +167,8 @@ class EmotionAIService:
 
         except Exception as e:
             print(f"[AI] Erreur analyse : {e}")
+            import traceback
+            traceback.print_exc()
             return self._get_error_result(str(e))
         
         finally:
