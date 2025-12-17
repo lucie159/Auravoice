@@ -44,8 +44,13 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
+    allow_origins=[
+        "http://localhost:3000",
+        "https://auravoice.vercel.app",  # <-- Ton URL Vercel exacte
+        "*"  # En dernier recours pour la démo, autorise tout le monde (optionnel mais pratique)
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["*"],  # Autorise GET, POST, PUT, DELETE...
     allow_headers=["*"],
 )
 
