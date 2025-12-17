@@ -1,11 +1,11 @@
 import os
 import shutil
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from app.services.emotion_ai import emotion_service
+from app.services.emotion_ai_service import emotion_service
 
 router = APIRouter()
 
-@router.post("/analyze/upload")
+@router.post("api/analyze/upload")
 async def analyze_audio_endpoint(file: UploadFile = File(...)):
     # 1. Dossier temporaire
     temp_dir = "temp_uploads"
