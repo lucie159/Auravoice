@@ -8,7 +8,7 @@ app_port: 7860
 pinned: false
 ---
 
-# AuraVoice Backend
+# AuraVoice Backend  
 
 Backend FastAPI pour le copilote émotionnel AuraVoice.
 Hébergé sur Hugging Face Spaces via Docker.
@@ -40,7 +40,7 @@ cp .env.example .env
 
 # Démarrer le serveur
 python -m app.main
-📁 Structure
+Structure
 code
 Code
 backend/
