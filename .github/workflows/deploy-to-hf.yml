@@ -20,7 +20,7 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_USERNAME: "luciesp"
-          HF_SPACE_NAME: "auravoice-backend" 
+          HF_SPACE_NAME: "auravoice-backend"
         run: |
           git config --global user.email "action@github.com"
           git config --global user.name "GitHub Action"
@@ -29,11 +29,17 @@ jobs:
           
           # Initialisation
           git init
-          # On force le nom de la branche à 'main'
           git checkout -b main
           
-          git add .
-          git commit -m "Deploy from GitHub Actions"
+          # --- ACTIVATION DE LFS (C'est ça qui manquait !) ---
+          git lfs install
+          git lfs track "*.keras"
+          git lfs track "*.pkl"
+          git add .gitattributes
+          # ---------------------------------------------------
           
-          # Push vers le BON espace
+          git add .
+          git commit -m "Deploy with LFS support"
+          
+          # Push forcé
           git push --force https://$HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/$HF_USERNAME/$HF_SPACE_NAME main
