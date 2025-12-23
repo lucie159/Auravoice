@@ -24,7 +24,7 @@ jobs:
           # 👇 REMPLACE PAR TON NOM D'UTILISATEUR HUGGING FACE
           HF_USERNAME: "luciesp"
           # 👇 REMPLACE PAR LE NOM EXACT DE TON SPACE
-          HF_SPACE_NAME: "auravoice"
+          HF_SPACE_NAME: "auravoice-backend"
         run: |
           echo "Début du déploiement vers Hugging Face..."
           
