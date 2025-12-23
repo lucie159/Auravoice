@@ -27,7 +27,8 @@ soundfile
 numpy<2.0
 noisereduce
 scipy
-joblib
+joblib    
 scikit-learn>=1.2.2
+
 
 
