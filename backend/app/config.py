@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     postgres_password: str = "3UgafVPEPRSUeKVs"
     
     # 5. La Database (souvent 'postgres')
-    postgres_db: str = "postgres"
+    postgres_db: str = "postgres"   
     
     
   
